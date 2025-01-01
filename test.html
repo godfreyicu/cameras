@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Camera Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        video {
+            width: 80%;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+        #status {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Control Your Laptop Camera</h1>
+    <video id="video" autoplay></video>
+    <div id="status">Camera is OFF</div>
+
+    <script src="peerjs.js"></script>
+
+    <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-analytics.js";
+    import { getDatabase, ref, set,onValue,onChildChanged } from 'https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js';
+  
+    // TODO: Add SDKs for Firebase products that you want to use
+    // https://firebase.google.com/docs/web/setup#available-libraries
+  
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyDLp3CwItsni97d-oAtXo6beKKq5QJKNl4",
+      authDomain: "home-shop-keeper.firebaseapp.com",
+      projectId: "home-shop-keeper",
+      storageBucket: "home-shop-keeper.firebasestorage.app",
+      messagingSenderId: "712715766169",
+      appId: "1:712715766169:web:59b76228f9eca851f9ab08",
+      measurementId: "G-0GLSL7WFFY"
+    };
+  
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+    const cameraStatusRef = ref(database,'cameraStatus');
+
+// Listen for changes in cameraStatus
+onValue(cameraStatusRef, (snapshot) => {
+    const status = snapshot.val();
+    console.log("Camera status: ", status);
+    if (status === "ON") {
+        document.getElementById('status').innerText = "Camera is ON";
+        startCamera();
+        
+    } else if (status === "OFF") {
+        document.getElementById('status').innerText = "Camera is OFF";
+        stopCamera();
+    }
+});
+        let videoStream,peer;
+
+        // Function to start the camera using getUserMedia()
+        function startCamera() {
+            // In the receiving peer (second peer)
+         navigator.mediaDevices.getUserMedia({ video:{
+            frameRate: { ideal: 15, max: 20 },
+            width: { ideal: 640 }, // You can adjust the resolution as needed
+            height: { ideal: 480 }
+        } })
+         .then((stream) => {
+         videoStream = stream; // Store local stream for the receiving peer
+
+        const peerid = "dc702520-icumargod-a52a-48911a76bb73"; // Unique Peer ID for this peer
+        peer = new Peer(peerid,{
+            host: "e50118bdaf9917.lhr.life",
+            path: "/",
+            secure: true
+        });
+    
+        // When the peer connection is opened
+        peer.on('open', (id) => {
+            console.log("Peer opened with ID:", id);
+
+            // Store the Peer ID in Firebase for the receiving peer
+            const livestreamRem = ref(database, 'livestreams/server');
+            set(livestreamRem, { peerId: id });
+            console.log("Peer ID stored in Firebase:", id);
+            startcall(stream);
+        });
+
+        
+
+    });
+
+        }
+
+
+        //call function
+        function startcall(stream){
+            const clientref = ref(database, 'livestreams/client/peerId');
+        onValue(clientref,(snapshot)=>{
+            const clientId = snapshot.val(); 
+            if (clientId) {
+            
+            const call = peer.call(clientId, stream);  // Use the actual stream to call
+            console.log("Calling peer:", clientId);
+            // Handle the remote stream from the called peer (second peer)
+            call.on('stream', (remoteStream) => {
+                console.log("Receiving remote stream from peer:", serverId);
+                document.getElementById('livefeed').srcObject = remoteStream; // Display the remote stream
+            });
+
+            // Error handling for the call
+            call.on('error', (err) => {
+                console.error('Call error:', err);
+            });
+
+            // Call closed (stream has ended or peer has disconnected)
+            call.on('close', () => {
+                console.log('Call closed');
+                document.getElementById('livefeed').srcObject = null;
+            });
+        } //else {
+            //console.error('Invalid server peerId');
+        //}
+        });
+        }
+
+        // Function to stop the camera
+        function stopCamera() {
+            if (videoStream) {
+                const tracks = videoStream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoStream = null;
+                const videoElement = document.getElementById('video');
+                videoElement.srcObject = null;
+                
+            }
+            const livestreamReceiver = ref(database, 'livestreams/server');
+            set(livestreamReceiver, {
+                peerId: 0 // Reset the peerId to 0
+            });
+
+            peer.destroy();
+        }
+
+        
+
+    </script>
+</body>
+</html>
